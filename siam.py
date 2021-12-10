@@ -6,6 +6,18 @@ from gftool import siam
 
 from dmrg_tn import MPS, MPO, DMRG, chain, MO_AXES, setup_logging
 
+DIM = 2  #: local dimension
+ORAISE = np.array([[0, 1],
+                   [0, 0]], dtype=np.int8)
+ONUMBER = np.array([[0, 0],
+                    [0, 1]], dtype=np.int8)
+OPARITY = np.array([[1, 0],
+                    [0, -1]], dtype=np.int8)
+IDX = np.eye(DIM, dtype=np.int8)
+
+for const in (ORAISE, ONUMBER, OPARITY, IDX):
+    const.setflags(write=False)
+
 
 def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> MPO:
     """Construct MPO for the SIAM in star geometry.
@@ -30,39 +42,33 @@ def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> MPO:
         Matrix product operator of the SIAM Hamiltonian.
 
     """
-    dim = 2
     e_bath, hopping = np.asarray(e_bath), np.asarray(hopping)
     if e_bath.shape[-1] != hopping.shape[-1]:
         raise ValueError
-    oc = np.array([[0, 1],
-                   [0, 0]], dtype=np.int8)
-    on = np.array([[0, 0],
-                   [0, 1]], dtype=np.int8)
-    op = np.array([[1, 0],
-                   [0, -1]], dtype=np.int8)
-    idx = np.eye(dim, dtype=np.int8)
     # diagonal skeleton
-    wi = np.zeros([4, 4, dim, dim])
-    wi[0, 0, :, :] = wi[1, 1, :, :] = idx
-    wi[2, 2, :, :] = wi[3, 3, :, :] = op
+    wi = np.zeros([4, 4, DIM, DIM])
+    wi[0, 0, :, :] = wi[1, 1, :, :] = IDX
+    wi[2, 2, :, :] = wi[3, 3, :, :] = OPARITY
     Hup = []
-    Hup.append(np.array([e_bath[0]*on, idx, hopping[0]*oc, hopping[0].conj()*oc.T])[None, :])
+    Hup.append(np.array([e_bath[0]*ONUMBER, IDX, hopping[0]*ORAISE,
+                         hopping[0].conj()*ORAISE.T])[None, :])
     for eps, tt in zip(e_bath[1:], hopping[1:]):
         Hi = wi.copy()
-        Hi[1, :, :, :] = [eps*on, idx, tt*oc, tt.conj()*oc.T]
+        Hi[1, :, :, :] = [eps*ONUMBER, IDX, tt*ORAISE, tt.conj()*ORAISE.T]
         Hup.append(Hi)
     Hdn = []
-    Hdn.append(np.array([e_bath[-1]*on, idx, hopping[-1]*oc, hopping[-1].conj()*oc.T])[:, None])
+    Hdn.append(np.array([e_bath[-1]*ONUMBER, IDX, hopping[-1]*ORAISE,
+                         hopping[-1].conj()*ORAISE.T])[:, None])
     for eps, tt in zip(e_bath[-2::-1], hopping[-2::-1]):
         Hi = wi.copy()
-        Hi[:, 1, :, :] = [eps*on, idx, tt*oc, tt.conj()*oc.T]
+        Hi[:, 1, :, :] = [eps*ONUMBER, IDX, tt*ORAISE, tt.conj()*ORAISE.T]
         Hdn.append(Hi)
-    Himpup = np.zeros([4, 3, dim, dim])
-    Himpup[1, :, :, :] = [idx, e_onsite*on, on]
-    Himpup[:, 1, :, :] = [idx, e_onsite*on, oc.T, oc]
-    Himpdn = np.zeros([3, 4, dim, dim])
-    Himpdn[0, :, :, :] = [idx, e_onsite*on, oc.T, oc]
-    Himpdn[:, 1, :, :] = [e_onsite*on, idx, interaction*on]
+    Himpup = np.zeros([4, 3, DIM, DIM])
+    Himpup[1, :, :, :] = [IDX, e_onsite*ONUMBER, ONUMBER]
+    Himpup[:, 1, :, :] = [IDX, e_onsite*ONUMBER, ORAISE.T, ORAISE]
+    Himpdn = np.zeros([3, 4, DIM, DIM])
+    Himpdn[0, :, :, :] = [IDX, e_onsite*ONUMBER, ORAISE.T, ORAISE]
+    Himpdn[:, 1, :, :] = [e_onsite*ONUMBER, IDX, interaction*ONUMBER]
     end = np.ones([1, 1, 1], dtype=np.int8)
     node_l = tn.Node(end, name="LH", axis_names=["right", "phys_in", "phys_out"])
     node_r = tn.Node(end, name="HR", axis_names=["left", "phys_in", "phys_out"])

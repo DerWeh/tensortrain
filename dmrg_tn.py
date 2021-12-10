@@ -448,7 +448,7 @@ def _matvec(mpo, vec_shape, path, vec):
 
 def mpo_operator(mpo: List[tn.Node]) -> sla.LinearOperator:
     """Make `mpo` into a linear operator for Lanczos."""
-    vec_shape = tuple([onode['phys_in'].dimension for onode in mpo])
+    vec_shape = tuple(onode['phys_in'].dimension for onode in mpo)
     size = np.product(vec_shape)
     # Pre-compute optimal path
     testnode = tn.Node(np.empty(vec_shape))

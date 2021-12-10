@@ -2,6 +2,8 @@
 import numpy as np
 import tensornetwork as tn
 
+from gftool import siam
+
 from dmrg_tn import MPS, MPO, DMRG, chain, MO_AXES, setup_logging
 
 
@@ -39,7 +41,7 @@ def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> MPO:
     op = np.array([[1, 0],
                    [0, -1]], dtype=np.int8)
     idx = np.eye(dim, dtype=np.int8)
-    # diagonal sceleton
+    # diagonal skeleton
     wi = np.zeros([4, 4, dim, dim])
     wi[0, 0, :, :] = wi[1, 1, :, :] = idx
     wi[2, 2, :, :] = wi[3, 3, :, :] = op
@@ -75,7 +77,6 @@ def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> MPO:
 
 def exact_energy(e_onsite, e_bath, hopping) -> float:
     """Exact ground state energy computed from free fermions."""
-    from gftool import siam
     ham = siam.hamiltonian_matrix(e_onsite, e_bath=e_bath, hopping=hopping)
     eigs = np.linalg.eigvalsh(ham)
     return 2 * np.sum(eigs[eigs < 0])  # all energies < 0 are double occupied

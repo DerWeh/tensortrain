@@ -96,8 +96,8 @@ if __name__ == '__main__':
     TRUNC_WEIGHT = 1e-6
     SWEEPS = 3
     SHOW = True
-    setup_logging(level=logging.DEBUG)  # print all
-    # setup_logging(level=logging.INFO)
+    # setup_logging(level=logging.DEBUG)  # print all
+    setup_logging(level=logging.INFO)
 
     # Initialize state and operator
     BATH_SIZE = 50
@@ -122,8 +122,8 @@ if __name__ == '__main__':
         eng, err = dmrg.sweep_2site(MAX_BOND_DIM, TRUNC_WEIGHT)
         energies += eng
         errors += err
-        H2 = dmrg.eval_ham2()
         print(f"GS energy: {energies[-1]}, (max truncation {max(err)})", flush=True)
+        H2 = dmrg.eval_ham2()
         print(f"Estimated error {abs((H2 - eng[-1]**2)/eng[-1])}", flush=True)
     energies = np.array(energies)
     gs_energy = exact_energy(np.array(E_ONSITE), e_bath=E_BATH, hopping=HOPPING)

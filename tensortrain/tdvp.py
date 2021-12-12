@@ -41,19 +41,9 @@ class TDVP(tt.Sweeper):
             left, rvh = tn.split_node_qr(new_node, new_node[:2], new_node[2:],
                                          left_name=f"{site}L")
             left.add_axis_names(tt.AXES_S)
-            # create new left Hamiltonian
-            mpol: List[tn.Node] = [self.ham_left[site].copy(), left.copy(),
-                                   left.copy(conjugate=True), self.ham[site].copy()]
-            tn.connect(mpol[1]["left"], mpol[0]["phys_in"])
-            tn.connect(mpol[3]["left"], mpol[0]["right"])
-            tn.connect(mpol[2]["left"], mpol[0]["phys_out"])
-            tn.connect(mpol[1]["phys"], mpol[3]["phys_in"])
-            tn.connect(mpol[2]["phys"], mpol[3]["phys_out"])
-            self.ham_left[site+1] = tn.contractors.auto(
-                mpol, output_edge_order=[mpol[3]["right"], mpol[1]["right"], mpol[2]["right"]]
-            )
-            self.ham_left[site+1].name = f"LH{site+1}"
-            self.ham_left[site+1].axis_names = self.ham_left[site].axis_names
+            # create new left Hamiltonian for next site
+            self.update_ham_left(site=site+1, state_node=left)
+
             mpo = [self.ham_left[site+1].copy(), self.ham_right[site].copy()]
             tt.chain(mpo)
             h_eff = tt.herm_linear_operator(mpo)

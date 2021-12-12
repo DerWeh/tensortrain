@@ -13,8 +13,10 @@ import scipy.sparse.linalg as sla
 
 LOGGER = logging.getLogger(__name__)
 
-AXES_S = ("left", "phys", "right")  #: names of edges of a matrix state
-AXES_O = ("left", "right", "phys_in", "phys_out")  #: names of edges of a matrix operator
+AXES_S = ("left", "phys", "right")  #: names of edges of a state node
+AXES_O = ("left", "right", "phys_in", "phys_out")  #: names of edges of a operator node
+AXES_L = ("right", "phys_in", "phys_out")  #: names of edges of left operator node
+AXES_R = ("left", "phys_in", "phys_out")  #: names of edges of right operator node
 
 
 def show(nodes: List[tn.Node]):
@@ -336,3 +338,46 @@ class Sweeper:
             ham_right[site-1] = mpo_r.copy()
             ham_right[site-1].axis_names = ham_right[-1].axis_names
         return ham_right
+
+    def update_ham_left(self, site: int, state_node: tn.Node):
+        """Calculate left Hamiltonian at `site` from ``site-1`` and `state_node`."""
+        if site == 0:
+            raise ValueError("Left Hamiltonian for site 0 is fixed.")
+        ham_left = self.ham_left[site-1].copy()
+        bra = state_node.copy(conjugate=True)
+        ham = self.ham[site-1].copy()
+        ket = state_node.copy()
+        tn.connect(bra["left"], ham_left["phys_in"])
+        tn.connect(ham["left"], ham_left["right"])
+        tn.connect(ket["left"], ham_left["phys_out"])
+        tn.connect(bra["phys"], ham["phys_in"])
+        tn.connect(ket["phys"], ham["phys_out"])
+        self.ham_left[site] = tn.contractors.auto(
+            [ham_left, bra, ham, ket],
+            output_edge_order=[ham["right"], bra["right"], ket["right"]]  # match AXES_L
+        )
+        self.ham_left[site].name = f"LH{site}"
+        self.ham_left[site].axis_names = AXES_L
+
+    def update_ham_right(self, site: int, state_node: tn.Node):
+        """Calculate right Hamiltonian at `site` from ``site-1`` and `state_node`."""
+        if site == len(self.state) - 1:
+            raise ValueError("Right Hamiltonian for last site is fixed.")
+
+        ham_right = self.ham_right[site+1].copy()
+        bra = state_node.copy(conjugate=True)
+        ham = self.ham[site+1].copy()
+        ket = state_node.copy()
+
+        # create new right Hamiltonian
+        tn.connect(bra["right"], ham_right["phys_in"])
+        tn.connect(ham["right"], ham_right["left"])
+        tn.connect(ket["right"], ham_right["phys_out"])
+        tn.connect(bra["phys"], ham["phys_in"])
+        tn.connect(ket["phys"], ham["phys_out"])
+        self.ham_right[site] = tn.contractors.auto(
+            [ham_right, bra, ham, ket],
+            output_edge_order=[ham["left"], bra["left"], ket["left"]]
+        )
+        self.ham_right[site].name = f"HR{site}"
+        self.ham_right[site].axis_names = AXES_R

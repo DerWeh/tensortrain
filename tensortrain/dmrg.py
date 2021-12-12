@@ -68,19 +68,7 @@ class DMRG(tt.Sweeper):
             )
             self.state.set_range(site, site+2, [left, right])
             self.state.center += 1
-            # create new left Hamiltonian
-            mpol: List[tn.Node] = [self.ham_left[site].copy(), self.state[site].copy(),
-                                   self.state[site].copy(conjugate=True), self.ham[site].copy()]
-            tn.connect(mpol[1]["left"], mpol[0]["phys_in"])
-            tn.connect(mpol[3]["left"], mpol[0]["right"])
-            tn.connect(mpol[2]["left"], mpol[0]["phys_out"])
-            tn.connect(mpol[1]["phys"], mpol[3]["phys_in"])
-            tn.connect(mpol[2]["phys"], mpol[3]["phys_out"])
-            self.ham_left[site+1] = tn.contractors.auto(
-                mpol, output_edge_order=[mpol[3]["right"], mpol[1]["right"], mpol[2]["right"]]
-            )
-            self.ham_left[site+1].name = f"LH{site+1}"
-            self.ham_left[site+1].axis_names = self.ham_left[site].axis_names
+            self.update_ham_left(site+1, state_node=left)
             LOGGER.debug("Right sweep: energy %e, bond-dim %3s, trunc %.3e",
                          energies[-1], rs.tensor.shape[0], tws[-1])
             if tws[-1] > trunc_weight:
@@ -127,19 +115,7 @@ class DMRG(tt.Sweeper):
             )
             self.state.set_range(site-1, site+1, [left, right])
             self.state.center -= 1
-            # create new right Hamiltonian
-            mpor: List[tn.Node] = [self.ham_right[site].copy(), self.state[site].copy(),
-                                   self.state[site].copy(conjugate=True), self.ham[site].copy()]
-            tn.connect(mpor[1]["right"], mpor[0]["phys_in"])
-            tn.connect(mpor[3]["right"], mpor[0]["left"])
-            tn.connect(mpor[2]["right"], mpor[0]["phys_out"])
-            tn.connect(mpor[1]["phys"], mpor[3]["phys_in"])
-            tn.connect(mpor[2]["phys"], mpor[3]["phys_out"])
-            self.ham_right[site-1] = tn.contractors.auto(
-                mpor, output_edge_order=[mpor[3]["left"], mpor[1]["left"], mpor[2]["left"]]
-            )
-            self.ham_right[site-1].name = f"HR{site+1}"
-            self.ham_right[site-1].axis_names = self.ham_right[site].axis_names
+            self.update_ham_right(site-1, state_node=right)
             LOGGER.debug("Left sweep:  energy %e, bond-dim %3s, trunc %.3e",
                          energies[-1], ls.tensor.shape[0], tws[-1])
             if tws[-1] > trunc_weight:

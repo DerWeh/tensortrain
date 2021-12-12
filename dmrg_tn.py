@@ -20,51 +20,8 @@ def show(nodes: List[tn.Node]):
     input("wait")
 
 
-class DMRG:
+class DMRG(tt.Sweeper):
     """DMRG method to obtain ground-state."""
-
-    def __init__(self, state: tt.State, ham: tt.Operator):
-        """Use starting state and Hamiltonian."""
-        if len(state) != len(ham):
-            raise ValueError("MPS and Hamiltonian size don't match.")
-        self.state = state.copy()
-        if state.center is None:  # no orthogonalization
-            state.center = len(state) - 1
-        if state.center != 0:  # right orthogonalize MPS
-            state.set_center(0)
-        self.ham = ham.copy()
-        self.ham_left: List[tn.Node] = [None] * len(ham)
-        self.ham_left[0] = ham.left.copy()
-        self.ham_right = self.build_right_ham()
-
-    def build_right_ham(self) -> List[tn.Node]:
-        """Create products for right Hamiltonian."""
-        nsite = len(self.state)
-        ket = self.state.copy()
-        bra = self.state.copy(conjugate=True)
-        ham = self.ham.copy()
-        mpo = ham.nodes
-        mpo_r = ham.right
-        # connect the network
-        for site in range(nsite):  # connect vertically
-            tn.connect(ket[site]["phys"], mpo[site]["phys_in"])
-            tn.connect(mpo[site]["phys_out"], bra[site]["phys"])
-        tn.connect(ket[-1]["right"], mpo_r["phys_in"])
-        tn.connect(bra[-1]["right"], mpo_r["phys_out"])
-
-        # contract the network
-        ham_right: List[tn.Node] = [None] * nsite
-        ham_right[-1] = mpo_r.copy()
-        for site in range(nsite-1, 0, -1):
-            # show([mps[ii], mpo[ii], con[ii], mpo_r])
-            mpo_r = tn.contractors.auto(
-                [ket[site], mpo[site], bra[site], mpo_r],
-                output_edge_order=[nodes[site]["left"] for nodes in (mpo, ket, bra)],
-            )
-            mpo_r.name = f"HR{site}"
-            ham_right[site-1] = mpo_r.copy()
-            ham_right[site-1].axis_names = ham_right[-1].axis_names
-        return ham_right
 
     def sweep_2site_right(self, max_bond_dim: int, trunc_weight: float
                           ) -> Tuple[List[float], List[float]]:

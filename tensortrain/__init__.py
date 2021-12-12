@@ -13,7 +13,7 @@ from tensortrain.basics import (
 )
 from tensortrain.dmrg import DMRG
 from tensortrain.tdvp import TDVP
-from tensortrain.hamiltonians import heisenbergxx
+from tensortrain.hamiltonians import heisenbergxx, siam
 
 
 LOGGER = logging.getLogger(__name__)

@@ -4,7 +4,6 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 import tensortrain as tt
-import siam
 
 
 def test_tdvp1_siam_gs_evolution():
@@ -21,7 +20,7 @@ def test_tdvp1_siam_gs_evolution():
     e_onsite = 0
     e_bath = np.linspace(-2, 2, num=bath_size)
     hopping = np.ones(bath_size)
-    ham = siam.siam_mpo(e_onsite, interaction=0, e_bath=e_bath, hopping=hopping)
+    ham = tt.siam.siam_hamiltonain(e_onsite, interaction=0, e_bath=e_bath, hopping=hopping)
     mps = tt.State.from_random(
         phys_dims=[2]*len(ham),
         bond_dims=[min(2**(site), 2**(len(ham)-site), max_bond_dim//4)

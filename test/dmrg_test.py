@@ -4,7 +4,6 @@ import numpy as np
 from numpy.testing import assert_array_max_ulp
 
 import tensortrain as tt
-import siam
 
 
 def test_siam_gs_energy():
@@ -21,7 +20,7 @@ def test_siam_gs_energy():
     e_onsite = 0
     e_bath = np.linspace(-2, 2, num=bath_size)
     hopping = np.ones(bath_size)
-    ham = siam.siam_mpo(e_onsite, interaction=0, e_bath=e_bath, hopping=hopping)
+    ham = tt.siam.siam_hamiltonain(e_onsite, interaction=0, e_bath=e_bath, hopping=hopping)
     mps = tt.State.from_random(
         phys_dims=[2]*len(ham),
         bond_dims=[min(2**(site), 2**(len(ham)-site), max_bond_dim//4)
@@ -32,5 +31,5 @@ def test_siam_gs_energy():
     # Run DMRG
     for __ in range(sweeps):
         eng, __ = dmrg.sweep_2site(max_bond_dim, trunc_weight)
-    gs_energy = siam.exact_energy(np.array(e_onsite), e_bath=e_bath, hopping=hopping)
+    gs_energy = tt.siam.exact_energy(np.array(e_onsite), e_bath=e_bath, hopping=hopping)
     assert_array_max_ulp(eng[-1], gs_energy, maxulp=10)

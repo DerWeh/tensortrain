@@ -40,3 +40,11 @@ def test_tdvp1_siam_gs_evolution():
     # one sweep is half a time evolution
     overlap = tt.inner(dmrg.state, tevo.state)
     assert_allclose(overlap, np.exp(-0.5j*time_step*gs_energy), rtol=1e-14)
+    tevo.sweep_1site_left(time_step)
+    # another half step
+    overlap = tt.inner(dmrg.state, tevo.state)
+    assert_allclose(overlap, np.exp(-1.0j*time_step*gs_energy), rtol=1e-14)
+    # do a full sweep
+    tevo.sweep_1site(time_step)
+    overlap = tt.inner(dmrg.state, tevo.state)
+    assert_allclose(overlap, np.exp(-2.0j*time_step*gs_energy), rtol=1e-14)

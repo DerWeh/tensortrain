@@ -2,13 +2,13 @@
 import logging
 
 from tensortrain.basics import (
-    MO_AXES,
-    MPO,
-    MPS,
-    MS_AXES,
+    AXES_O,
+    AXES_S,
+    State,
     chain,
+    herm_linear_operator,
     inner,
-    mpo_operator,
+    Operator,
 )
 
 LOGGER = logging.getLogger(__name__)

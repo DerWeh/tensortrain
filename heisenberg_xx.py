@@ -8,7 +8,7 @@ import tensortrain as tt
 from dmrg_tn import DMRG, setup_logging
 
 
-def xx_mpo(size: int) -> tt.MPO:
+def xx_mpo(size: int) -> tt.Operator:
     """Create MPO for XX Hamiltonian."""
     phys_dim = 2
     # Pauli matrices
@@ -27,11 +27,11 @@ def xx_mpo(size: int) -> tt.MPO:
     mat[1:, -1, :, :] = s_p, s_m, idx
     left = np.array([1, 0, 0, 0]).reshape([4, 1, 1])  # left MPO boundary
     right = np.array([0, 0, 0, 1]).reshape([4, 1, 1])  # right MPO boundary
-    nodes = [tn.Node(mat, name=f"H{site}", axis_names=tt.MO_AXES) for site in range(size)]
+    nodes = [tn.Node(mat, name=f"H{site}", axis_names=tt.AXES_O) for site in range(size)]
     node_l = tn.Node(left, name="LH", axis_names=["right", "phys_in", "phys_out"])
     node_r = tn.Node(right, name="HR", axis_names=["left", "phys_in", "phys_out"])
     tt.chain([node_l] + nodes + [node_r])
-    return tt.MPO(nodes, left=node_l, right=node_r)
+    return tt.Operator(nodes, left=node_l, right=node_r)
 
 
 def exact_energy(nsite: int) -> float:
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     # setup_logging(level=logging.INFO)
 
     # Initialize state and operator
-    mps = tt.MPS.from_random(
+    mps = tt.State.from_random(
         phys_dims=[2]*SIZE,
         bond_dims=[min(2**(site), 2**(SIZE-site), MAX_BOND_DIM//4)
                    for site in range(SIZE-1)]

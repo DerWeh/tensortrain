@@ -20,7 +20,7 @@ for const in (ORAISE, ONUMBER, OPARITY, IDX):
     const.setflags(write=False)
 
 
-def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> tt.MPO:
+def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> tt.Operator:
     """Construct MPO for the SIAM in star geometry.
 
     Currently no spin-dependent parameters allowed, up/dn spin are identically.
@@ -73,13 +73,13 @@ def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> tt.MPO:
     end = np.ones([1, 1, 1], dtype=np.int8)
     node_l = tn.Node(end, name="LH", axis_names=["right", "phys_in", "phys_out"])
     node_r = tn.Node(end, name="HR", axis_names=["left", "phys_in", "phys_out"])
-    nodes = [tn.Node(hi, name=f"H{site}↑", axis_names=tt.MO_AXES) for site, hi in enumerate(Hup)]
-    nodes.append(tn.Node(Himpup, name="Himp↑", axis_names=tt.MO_AXES))
-    nodes.append(tn.Node(Himpdn, name="Himp↓", axis_names=tt.MO_AXES))
-    _nodes = [tn.Node(hi, name=f"H{site}↓", axis_names=tt.MO_AXES) for site, hi in enumerate(Hdn)]
+    nodes = [tn.Node(hi, name=f"H{site}↑", axis_names=tt.AXES_O) for site, hi in enumerate(Hup)]
+    nodes.append(tn.Node(Himpup, name="Himp↑", axis_names=tt.AXES_O))
+    nodes.append(tn.Node(Himpdn, name="Himp↓", axis_names=tt.AXES_O))
+    _nodes = [tn.Node(hi, name=f"H{site}↓", axis_names=tt.AXES_O) for site, hi in enumerate(Hdn)]
     nodes += _nodes[::-1]
     tt.chain([node_l] + nodes + [node_r])
-    return tt.MPO(nodes, left=node_l, right=node_r)
+    return tt.Operator(nodes, left=node_l, right=node_r)
 
 
 def exact_energy(e_onsite, e_bath, hopping) -> float:
@@ -109,7 +109,7 @@ if __name__ == '__main__':
     HOPPING = np.ones(BATH_SIZE)
     U = 0
     ham = siam_mpo(E_ONSITE, interaction=U, e_bath=E_BATH, hopping=HOPPING)
-    mps = tt.MPS.from_random(
+    mps = tt.State.from_random(
         phys_dims=[2]*len(ham),
         bond_dims=[min(2**(site), 2**(len(ham)-site), MAX_BOND_DIM//4)
                    for site in range(len(ham)-1)]
@@ -141,7 +141,7 @@ if __name__ == '__main__':
             plt.ylabel(r"$E^{\mathrm{DMRG}} - E^{\mathrm{exact}}$")
             plt.tight_layout()
         #
-        bond_dims = [node['right'].dimension for node in dmrg.mps]
+        bond_dims = [node['right'].dimension for node in dmrg.state]
         plt.figure('bond dimensions')
         plt.axvline(len(mps)//2-0.5, color='black')
         plt.plot(bond_dims, drawstyle='steps-post')

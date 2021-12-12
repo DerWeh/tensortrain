@@ -24,7 +24,7 @@ def test_tdvp1_siam_gs_evolution():
     e_bath = np.linspace(-2, 2, num=bath_size)
     hopping = np.ones(bath_size)
     ham = siam.siam_mpo(e_onsite, interaction=0, e_bath=e_bath, hopping=hopping)
-    mps = tt.MPS.from_random(
+    mps = tt.State.from_random(
         phys_dims=[2]*len(ham),
         bond_dims=[min(2**(site), 2**(len(ham)-site), max_bond_dim//4)
                    for site in range(len(ham)-1)]
@@ -36,9 +36,9 @@ def test_tdvp1_siam_gs_evolution():
         eng, __ = dmrg.sweep_2site(max_bond_dim, trunc_weight)
 
     gs_energy = eng[-1]
-    tevo = tdvp.TDVP(mps=dmrg.mps, ham=dmrg.ham)
+    tevo = tdvp.TDVP(state=dmrg.state, ham=dmrg.ham)
     time_step = 0.1
     tevo.sweep_1site_right(time_step)
     # one sweep is half a time evolution
-    overlap = tt.inner(dmrg.mps, tevo.mps)
+    overlap = tt.inner(dmrg.state, tevo.state)
     assert_allclose(overlap, np.exp(-0.5j*time_step*gs_energy), rtol=1e-14)

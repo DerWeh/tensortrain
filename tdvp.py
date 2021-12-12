@@ -21,15 +21,15 @@ LOGGER = logging.getLogger(__name__)
 class TDVP:
     """TDVP method for time evolution."""
 
-    def __init__(self, mps: tt.MPS, ham: tt.MPO):
+    def __init__(self, state: tt.State, ham: tt.Operator):
         """State to evolve and Hamiltonian."""
-        if len(mps) != len(ham):
+        if len(state) != len(ham):
             raise ValueError("MPS and Hamiltonian size don't match.")
-        self.mps = mps.copy()
-        if mps.center is None:
-            mps.center = len(mps) - 1
-        if mps.center != 0:  # right orthogonalize MPS
-            mps.set_center(0)
+        self.state = state.copy()
+        if state.center is None:
+            state.center = len(state) - 1
+        if state.center != 0:  # right orthogonalize MPS
+            state.set_center(0)
         self.ham = ham.copy()
         self.ham_left: List[tn.Node] = [None] * len(ham)
         self.ham_left[0] = ham.left.copy()
@@ -37,18 +37,18 @@ class TDVP:
 
     def build_right_ham(self) -> List[tn.Node]:
         """Create products for right Hamiltonian."""
-        nsite = len(self.mps)
-        mps = self.mps.copy()
-        con = self.mps.copy(conjugate=True)
+        nsite = len(self.state)
+        ket = self.state.copy()
+        bra = self.state.copy(conjugate=True)
         ham = self.ham.copy()
         mpo = ham.nodes
         mpo_r = ham.right
         # connect the network
         for site in range(nsite):  # connect vertically
-            tn.connect(mps[site]["phys"], mpo[site]["phys_in"])
-            tn.connect(mpo[site]["phys_out"], con[site]["phys"])
-        tn.connect(mps[-1]["right"], mpo_r["phys_in"])
-        tn.connect(con[-1]["right"], mpo_r["phys_out"])
+            tn.connect(ket[site]["phys"], mpo[site]["phys_in"])
+            tn.connect(mpo[site]["phys_out"], bra[site]["phys"])
+        tn.connect(ket[-1]["right"], mpo_r["phys_in"])
+        tn.connect(bra[-1]["right"], mpo_r["phys_out"])
 
         # contract the network
         ham_right: List[tn.Node] = [None] * nsite
@@ -56,8 +56,8 @@ class TDVP:
         for site in range(nsite-1, 0, -1):
             # show([mps[ii], mpo[ii], con[ii], mpo_r])
             mpo_r = tn.contractors.auto(
-                [mps[site], mpo[site], con[site], mpo_r],
-                output_edge_order=[nodes[site]["left"] for nodes in (mpo, mps, con)],
+                [ket[site], mpo[site], bra[site], mpo_r],
+                output_edge_order=[nodes[site]["left"] for nodes in (mpo, ket, bra)],
             )
             mpo_r.name = f"HR{site}"
             ham_right[site-1] = mpo_r.copy()
@@ -66,29 +66,29 @@ class TDVP:
 
     def sweep_1site_right(self, time: float) -> None:
         """Sweep from left to right, evolving one site at a time."""
-        assert self.mps.center == 0, "To sweep right we start from the left"
+        assert self.state.center == 0, "To sweep right we start from the left"
         assert None not in self.ham_right[1:], "We need all right parts"
-        for site in range(0, len(self.mps)):
+        for site in range(0, len(self.state)):
             # locally optimize the state of sites `site` and `site+1`
             mpo = [self.ham_left[site].copy(), self.ham[site].copy(), self.ham_right[site].copy()]
             tt.chain(mpo)
             # TODO: calculate the trace for calculation of exponential
-            h_eff = tt.mpo_operator(mpo)
+            h_eff = tt.herm_linear_operator(mpo)
             # show(mpo)
-            v0 = self.mps[site]
+            v0 = self.state[site]
             new_node = tn.Node(
                 expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1)).reshape(v0.shape)
             )
-            if site == len(self.mps) - 1:  # stated evolved, stop here
+            if site == len(self.state) - 1:  # stated evolved, stop here
                 new_node.name = str(site)
-                new_node.add_axis_names(tt.MS_AXES)
-                self.mps.set_node(site, new_node)
+                new_node.add_axis_names(tt.AXES_S)
+                self.state.set_node(site, new_node)
                 break
 
             # split state and backward evolve center of orthogonality
             left, rvh = tn.split_node_qr(new_node, new_node[:2], new_node[2:],
                                          left_name=f"{site}L")
-            left.add_axis_names(tt.MS_AXES)
+            left.add_axis_names(tt.AXES_S)
             # create new left Hamiltonian
             mpol: List[tn.Node] = [self.ham_left[site].copy(), left.copy(),
                                    left.copy(conjugate=True), self.ham[site].copy()]
@@ -104,19 +104,19 @@ class TDVP:
             self.ham_left[site+1].axis_names = self.ham_left[site].axis_names
             mpo = [self.ham_left[site+1].copy(), self.ham_right[site].copy()]
             tt.chain(mpo)
-            h_eff = tt.mpo_operator(mpo)
+            h_eff = tt.herm_linear_operator(mpo)
             new_node = tn.Node(
                 expm_multiply(+0.5j*time*h_eff, rvh.tensor.reshape(-1)).reshape(rvh.shape)
             )
-            right = self.mps[site+1].copy()
+            right = self.state[site+1].copy()
             tn.connect(new_node[1], right["left"])
             right = tn.contract_between(
                 new_node, right, name=str(site+1),
                 output_edge_order=[new_node[0], *right[1:]],
-                axis_names=tt.MS_AXES
+                axis_names=tt.AXES_S
             )
-            self.mps.set_range(site, site+2, [left, right])
-            self.mps.center += 1
+            self.state.set_range(site, site+2, [left, right])
+            self.state.center += 1
 
 
 # example run
@@ -139,7 +139,7 @@ if __name__ == '__main__':
     HOPPING = np.ones(BATH_SIZE)
     U = 0
     ham = siam.siam_mpo(E_ONSITE, interaction=U, e_bath=E_BATH, hopping=HOPPING)
-    mps = tt.MPS.from_random(
+    mps = tt.State.from_random(
         phys_dims=[2]*len(ham),
         bond_dims=[min(2**(site), 2**(len(ham)-site), MAX_BOND_DIM//4)
                    for site in range(len(ham)-1)]
@@ -171,7 +171,7 @@ if __name__ == '__main__':
             plt.ylabel(r"$E^{\mathrm{DMRG}} - E^{\mathrm{exact}}$")
             plt.tight_layout()
         #
-        bond_dims = [node['right'].dimension for node in dmrg.mps]
+        bond_dims = [node['right'].dimension for node in dmrg.state]
         plt.figure('bond dimensions')
         plt.axvline(len(mps)//2-0.5, color='black')
         plt.plot(bond_dims, drawstyle='steps-post')

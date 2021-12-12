@@ -23,15 +23,15 @@ def show(nodes: List[tn.Node]):
 class DMRG:
     """DMRG method to obtain ground-state."""
 
-    def __init__(self, mps: tt.MPS, ham: tt.MPO):
+    def __init__(self, state: tt.State, ham: tt.Operator):
         """Use starting state and Hamiltonian."""
-        if len(mps) != len(ham):
+        if len(state) != len(ham):
             raise ValueError("MPS and Hamiltonian size don't match.")
-        self.mps = mps.copy()
-        if mps.center is None:  # no orthogonalization
-            mps.center = len(mps) - 1
-        if mps.center != 0:  # right orthogonalize MPS
-            mps.set_center(0)
+        self.state = state.copy()
+        if state.center is None:  # no orthogonalization
+            state.center = len(state) - 1
+        if state.center != 0:  # right orthogonalize MPS
+            state.set_center(0)
         self.ham = ham.copy()
         self.ham_left: List[tn.Node] = [None] * len(ham)
         self.ham_left[0] = ham.left.copy()
@@ -39,18 +39,18 @@ class DMRG:
 
     def build_right_ham(self) -> List[tn.Node]:
         """Create products for right Hamiltonian."""
-        nsite = len(self.mps)
-        mps = self.mps.copy()
-        con = self.mps.copy(conjugate=True)
+        nsite = len(self.state)
+        ket = self.state.copy()
+        bra = self.state.copy(conjugate=True)
         ham = self.ham.copy()
         mpo = ham.nodes
         mpo_r = ham.right
         # connect the network
         for site in range(nsite):  # connect vertically
-            tn.connect(mps[site]["phys"], mpo[site]["phys_in"])
-            tn.connect(mpo[site]["phys_out"], con[site]["phys"])
-        tn.connect(mps[-1]["right"], mpo_r["phys_in"])
-        tn.connect(con[-1]["right"], mpo_r["phys_out"])
+            tn.connect(ket[site]["phys"], mpo[site]["phys_in"])
+            tn.connect(mpo[site]["phys_out"], bra[site]["phys"])
+        tn.connect(ket[-1]["right"], mpo_r["phys_in"])
+        tn.connect(bra[-1]["right"], mpo_r["phys_out"])
 
         # contract the network
         ham_right: List[tn.Node] = [None] * nsite
@@ -58,8 +58,8 @@ class DMRG:
         for site in range(nsite-1, 0, -1):
             # show([mps[ii], mpo[ii], con[ii], mpo_r])
             mpo_r = tn.contractors.auto(
-                [mps[site], mpo[site], con[site], mpo_r],
-                output_edge_order=[nodes[site]["left"] for nodes in (mpo, mps, con)],
+                [ket[site], mpo[site], bra[site], mpo_r],
+                output_edge_order=[nodes[site]["left"] for nodes in (mpo, ket, bra)],
             )
             mpo_r.name = f"HR{site}"
             ham_right[site-1] = mpo_r.copy()
@@ -69,11 +69,11 @@ class DMRG:
     def sweep_2site_right(self, max_bond_dim: int, trunc_weight: float
                           ) -> Tuple[List[float], List[float]]:
         """Sweep from left to right, optimizing always two sites at once."""
-        assert self.mps.center == 0, "To sweep right we start from the left"
+        assert self.state.center == 0, "To sweep right we start from the left"
         assert None not in self.ham_right[1:], "We need all right parts"
         energies: List[float] = []
         tws: List[float] = []
-        for site in range(0, len(self.mps)-1):
+        for site in range(0, len(self.state)-1):
             # locally optimize the state of sites `site` and `site+1`
             mpo = [self.ham_left[site].copy(), self.ham[site].copy(),
                    self.ham[site+1].copy(), self.ham_right[site+1].copy()]
@@ -84,13 +84,13 @@ class DMRG:
             # tol : stopping criterion for accuracy
 
             # show(mpo)
-            node1, node2 = self.mps[site:site+2]
+            node1, node2 = self.state[site:site+2]
             v0 = tn.contract_between(
                 node1, node2,
                 output_edge_order=[node1["left"], node1["phys"], node2["phys"], node2["right"]]
             )
             gs_energy, gs_vec = sla.eigsh(
-                tt.mpo_operator(mpo), k=1, which='SA', v0=v0.tensor.reshape(-1),
+                tt.herm_linear_operator(mpo), k=1, which='SA', v0=v0.tensor.reshape(-1),
                 # tol=1e-6
             )
             energies.append(gs_energy.item())
@@ -104,16 +104,16 @@ class DMRG:
             tws.append(np.sqrt(np.sum(trunc_s**2)))
             if tws[-1] > 0:
                 rs.tensor /= np.sum(rs.tensor**2)
-            left.add_axis_names(tt.MS_AXES)
+            left.add_axis_names(tt.AXES_S)
             right = tn.contract_between(
                 rs, rvh, name=str(site+1), output_edge_order=[rs[0], *rvh[1:]],
-                axis_names=tt.MS_AXES,
+                axis_names=tt.AXES_S,
             )
-            self.mps.set_range(site, site+2, [left, right])
-            self.mps.center += 1
+            self.state.set_range(site, site+2, [left, right])
+            self.state.center += 1
             # create new left Hamiltonian
-            mpol: List[tn.Node] = [self.ham_left[site].copy(), self.mps[site].copy(),
-                                   self.mps[site].copy(conjugate=True), self.ham[site].copy()]
+            mpol: List[tn.Node] = [self.ham_left[site].copy(), self.state[site].copy(),
+                                   self.state[site].copy(conjugate=True), self.ham[site].copy()]
             tn.connect(mpol[1]["left"], mpol[0]["phys_in"])
             tn.connect(mpol[3]["left"], mpol[0]["right"])
             tn.connect(mpol[2]["left"], mpol[0]["phys_out"])
@@ -134,22 +134,22 @@ class DMRG:
     def sweep_2site_left(self, max_bond_dim: int, trunc_weight: float
                          ) -> Tuple[List[float], List[float]]:
         """Sweep from right to left, optimizing always two sites at once."""
-        assert self.mps.center == len(self.mps) - 1, "To sweep right we start from the left"
+        assert self.state.center == len(self.state) - 1, "To sweep right we start from the left"
         assert None not in self.ham_left[:-1], "We need all left parts"
         energies: List[float] = []
         tws: List[float] = []
-        for site in range(len(self.mps)-1, 0, -1):
+        for site in range(len(self.state)-1, 0, -1):
             # locally optimize the state of sites `site` and `site+1`
             mpo = [self.ham_left[site-1].copy(), self.ham[site-1].copy(),
                    self.ham[site].copy(), self.ham_right[site].copy()]
             tt.chain(mpo)
-            node1, node2 = self.mps[site-1:site+1]
+            node1, node2 = self.state[site-1:site+1]
             v0 = tn.contract_between(
                 node1, node2,
                 output_edge_order=[node1["left"], node1["phys"], node2["phys"], node2["right"]]
             )
             gs_energy, gs_vec = sla.eigsh(
-                tt.mpo_operator(mpo), k=1, which='SA', v0=v0.tensor.reshape(-1),
+                tt.herm_linear_operator(mpo), k=1, which='SA', v0=v0.tensor.reshape(-1),
                 # tol=1e-6
             )
             energies.append(gs_energy.item())
@@ -163,16 +163,16 @@ class DMRG:
             tws.append(np.sqrt(np.sum(trunc_s**2)))
             if tws[-1] > 0:
                 ls.tensor /= np.sum(ls.tensor**2)
-            right.add_axis_names(tt.MS_AXES)
+            right.add_axis_names(tt.AXES_S)
             left = tn.contract_between(
                 lu, ls, name=str(site-1), output_edge_order=[*lu[:-1], ls[1]],
-                axis_names=tt.MS_AXES,
+                axis_names=tt.AXES_S,
             )
-            self.mps.set_range(site-1, site+1, [left, right])
-            self.mps.center -= 1
+            self.state.set_range(site-1, site+1, [left, right])
+            self.state.center -= 1
             # create new right Hamiltonian
-            mpor: List[tn.Node] = [self.ham_right[site].copy(), self.mps[site].copy(),
-                                   self.mps[site].copy(conjugate=True), self.ham[site].copy()]
+            mpor: List[tn.Node] = [self.ham_right[site].copy(), self.state[site].copy(),
+                                   self.state[site].copy(conjugate=True), self.ham[site].copy()]
             tn.connect(mpor[1]["right"], mpor[0]["phys_in"])
             tn.connect(mpor[3]["right"], mpor[0]["left"])
             tn.connect(mpor[2]["right"], mpor[0]["phys_out"])
@@ -199,10 +199,10 @@ class DMRG:
     def eval_ham2(self) -> float:
         """Evaulate ⟨ψ|H²|ψ⟩."""
         # do iteratively to save memory
-        bra = self.mps.copy()
+        bra = self.state.copy()
         ham1 = self.ham.copy()
         ham2 = self.ham.copy()
-        ket = self.mps.copy(conjugate=True)
+        ket = self.state.copy(conjugate=True)
         # connect network
         tn.connect(ham1.left["phys_out"], ham2.left["phys_in"])
         tn.connect(bra[0]["left"], ham1.left["phys_in"])

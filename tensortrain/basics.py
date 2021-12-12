@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional
 from dataclasses import dataclass, InitVar
 from collections.abc import Sequence
 
@@ -13,8 +13,8 @@ import scipy.sparse.linalg as sla
 
 LOGGER = logging.getLogger(__name__)
 
-MS_AXES = ("left", "phys", "right")  #: names of edges of a matrix state
-MO_AXES = ("left", "right", "phys_in", "phys_out")  #: names of edges of a matrix operator
+AXES_S = ("left", "phys", "right")  #: names of edges of a matrix state
+AXES_O = ("left", "right", "phys_in", "phys_out")  #: names of edges of a matrix operator
 
 
 def show(nodes: List[tn.Node]):
@@ -42,8 +42,8 @@ def chain(nodes: List[tn.Node]) -> None:
         tn.connect(left["right"], right["left"])
 
 
-def inner(a: MPS, b: MPS) -> np.number:
-    """Calculate inner (scalar) product of two states `a` and `b`."""
+def inner(a: State, b: State) -> np.number:
+    """Calculate inner [scalar] product of two states `a` and `b`."""
     if len(a) != len(b):
         raise ValueError(f"Sizes of operators don't match ⟨{len(a)}, {len(b)}⟩")
 
@@ -64,8 +64,8 @@ def inner(a: MPS, b: MPS) -> np.number:
 
 
 @dataclass
-class MPS(Sequence):
-    """Container for the matrix product state."""
+class State(Sequence):
+    """Container for the tensor-train state."""
 
     nodes: List[tn.Node]
     center: Optional[int] = None
@@ -79,7 +79,7 @@ class MPS(Sequence):
 
     @classmethod
     def from_random(cls, phys_dims: List[int], bond_dims: List[int], seed=None):
-        """Create random MPS.
+        """Create random tensor-train state.
 
         Parameters
         ----------
@@ -98,7 +98,7 @@ class MPS(Sequence):
         rng = np.random.default_rng(seed)
         nodes: List[tn.Node] = [
             tn.Node(rng.standard_normal([bond_l, phys, bond_r]),
-                    axis_names=MS_AXES, name=str(ii))
+                    axis_names=AXES_S, name=str(ii))
             for ii, (bond_l, phys, bond_r)
             in enumerate(zip(bond_dims[:-1], phys_dims, bond_dims[1:]))
         ]
@@ -121,10 +121,10 @@ class MPS(Sequence):
                     left_edges=[node_r['left']],
                     right_edges=[node_r['phys'], node_r['right']],
                 )
-                self.nodes[pos].add_axis_names(MS_AXES)
+                self.nodes[pos].add_axis_names(AXES_S)
                 node_l = self.nodes[pos-1]
                 self.nodes[pos-1] = tn.contract_between(node_l, left, name=str(pos-1),
-                                                        axis_names=MS_AXES)
+                                                        axis_names=AXES_S)
                 # normalize network
                 self.nodes[pos-1].tensor /= _norm(self.nodes[pos-1])
             self.center = pos - 1
@@ -137,10 +137,10 @@ class MPS(Sequence):
                     left_edges=[node_l['left'], node_l['phys']],
                     right_edges=[node_l['right']],
                 )
-                self.nodes[pos].add_axis_names(MS_AXES)
+                self.nodes[pos].add_axis_names(AXES_S)
                 node_r = self.nodes[pos+1]
                 self.nodes[pos+1] = tn.contract_between(right, node_r, name=str(pos+1),
-                                                        axis_names=MS_AXES)
+                                                        axis_names=AXES_S)
                 # normalize network
                 self.nodes[pos+1].tensor /= _norm(self.nodes[pos+1])
             self.center = pos + 1
@@ -191,19 +191,19 @@ class MPS(Sequence):
         """Give number of nodes."""
         return len(self.nodes)
 
-    def copy(self, conjugate=False) -> MPS:
+    def copy(self, conjugate=False) -> State:
         """Create (shallow) copy."""
         nodes = tn.replicate_nodes(self.nodes, conjugate=conjugate)
         if conjugate:
             for node in nodes:
                 node.name = node.name[:-1] if node.name[-1] == '*' else node.name + '*'
-        mps = self.__class__(nodes, center=self.center, canonicalize=False)
-        return mps
+        state = self.__class__(nodes, center=self.center, canonicalize=False)
+        return state
 
 
 @dataclass
-class MPO(Sequence):
-    """Container for the matrix product operator."""
+class Operator(Sequence):
+    """Container for the tensor-train operator."""
 
     nodes: List[tn.Node]
     left: tn.Node
@@ -217,15 +217,15 @@ class MPO(Sequence):
         """Give number of nodes."""
         return len(self.nodes)
 
-    def copy(self) -> MPO:
+    def copy(self) -> Operator:
         """Create (shallow) copy."""
         left, *nodes, right = tn.replicate_nodes([self.left] + self.nodes + [self.right])
-        mpo = self.__class__(nodes, left=left, right=right)
-        return mpo
+        operator = self.__class__(nodes, left=left, right=right)
+        return operator
 
-    def __matmul__(self, other: MPO):
+    def __matmul__(self, other: Operator):
         """Connect and contract 'phys_in' of `self` with 'phys_out' of `other`."""
-        if not isinstance(other, MPO):
+        if not isinstance(other, Operator):
             return NotImplemented
         if len(self) != len(other):
             raise ValueError(f"Sizes of operators don't match {len(self)} @ {len(other)}")
@@ -241,51 +241,51 @@ class MPO(Sequence):
                 axis_names=["left2", "left1", "phys_in", "phys_out", "right2", "right1"],
             )
 
-        mpo1 = self.copy()
-        mpo2 = other.copy()
-        tn.connect(mpo1.left["phys_in"], mpo2.left["phys_out"])
+        op1 = self.copy()
+        op2 = other.copy()
+        tn.connect(op1.left["phys_in"], op2.left["phys_out"])
         left = tn.contract_between(
-            mpo1.left, mpo2.left, name=mpo1.left.name+mpo1.left.name,
-            output_edge_order=[mpo2.left['right'], mpo1.left['right'],
-                               mpo2.left['phys_in'], mpo1.left['phys_out']],
+            op1.left, op2.left, name=op1.left.name+op1.left.name,
+            output_edge_order=[op2.left['right'], op1.left['right'],
+                               op2.left['phys_in'], op1.left['phys_out']],
             axis_names=["right2", "right1", "phys_in", "phys_out"],
         )
-        tn.connect(mpo1.right["phys_in"], mpo2.right["phys_out"])
+        tn.connect(op1.right["phys_in"], op2.right["phys_out"])
         right = tn.contract_between(
-            mpo1.right, mpo2.right, name=mpo1.right.name+mpo1.right.name,
-            output_edge_order=[mpo2.right['left'], mpo1.right['left'],
-                               mpo2.right['phys_in'], mpo1.right['phys_out']],
+            op1.right, op2.right, name=op1.right.name+op1.right.name,
+            output_edge_order=[op2.right['left'], op1.right['left'],
+                               op2.right['phys_in'], op1.right['phys_out']],
             axis_names=["left2", "left1", "phys_in", "phys_out"],
         )
-        nodes = [combine(n1, n2) for n1, n2 in zip(mpo1, mpo2)]
-        return MPO(nodes, left=left, right=right)
+        nodes = [combine(n1, n2) for n1, n2 in zip(op1, op2)]
+        return Operator(nodes, left=left, right=right)
 
 
-def _matvec(mpo, vec_shape, path, vec):
-    """Matrix-vector product of `mpo` for Lanczos."""
+def _matvec(operator, vec_shape, path, vec):
+    """Matrix-vector product of `operator`."""
     node = tn.Node(vec.reshape(vec_shape))
-    mpo_ = tn.replicate_nodes(mpo)
-    out_edges = [onode["phys_out"] for onode in mpo_]
-    for ii, onode in enumerate(mpo_):
+    oper_ = tn.replicate_nodes(operator)
+    out_edges = [onode["phys_out"] for onode in oper_]
+    for ii, onode in enumerate(oper_):
         tn.connect(node[ii], onode['phys_in'])
-    # res = tn.contractors.auto(mpo_ + [node], output_edge_order=out_edges)
-    res = tn.contractors.contract_path(path, mpo_ + [node], output_edge_order=out_edges)
+    # res = tn.contractors.auto(oper_ + [node], output_edge_order=out_edges)
+    res = tn.contractors.contract_path(path, oper_ + [node], output_edge_order=out_edges)
     return res.tensor.reshape(-1)
 
 
-def mpo_operator(mpo: List[tn.Node]) -> sla.LinearOperator:
-    """Make `mpo` into a Hermitian linear operator for Lanczos."""
-    vec_shape = tuple(onode['phys_in'].dimension for onode in mpo)
+def herm_linear_operator(operator: List[tn.Node]) -> sla.LinearOperator:
+    """Create Hermitian linear operator from `operator`."""
+    vec_shape = tuple(onode['phys_in'].dimension for onode in operator)
     size = np.product(vec_shape)
     # Pre-compute optimal path
     testnode = tn.Node(np.empty(vec_shape))
-    mpo_ = tn.replicate_nodes(mpo)
-    for ii, onode in enumerate(mpo_):
+    oper_ = tn.replicate_nodes(operator)
+    for ii, onode in enumerate(oper_):
         tn.connect(testnode[ii], onode['phys_in'])
-    path = tn.contractors.path_solver('optimal', nodes=mpo_+[testnode])
+    path = tn.contractors.path_solver('optimal', nodes=oper_+[testnode])
 
     def matvec_(vec):
-        return _matvec(mpo, vec_shape=vec_shape, path=path, vec=vec)
+        return _matvec(operator, vec_shape=vec_shape, path=path, vec=vec)
 
     # Hamiltonian is Hermitian -> rmatvec=matvec
     return sla.LinearOperator(shape=(size, size), matvec=matvec_, rmatvec=matvec_)

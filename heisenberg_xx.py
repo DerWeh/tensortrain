@@ -5,7 +5,6 @@ import numpy as np
 import tensornetwork as tn
 
 import tensortrain as tt
-from dmrg_tn import DMRG, setup_logging
 
 
 def xx_mpo(size: int) -> tt.Operator:
@@ -49,8 +48,8 @@ if __name__ == '__main__':
     TRUNC_WEIGHT = 1e-6
     SWEEPS = 2
     SHOW = True
-    setup_logging(level=logging.DEBUG)  # print all
-    # setup_logging(level=logging.INFO)
+    tt.setup_logging(level=logging.DEBUG)  # print all
+    # tt.setup_logging(level=logging.INFO)
 
     # Initialize state and operator
     mps = tt.State.from_random(
@@ -59,7 +58,7 @@ if __name__ == '__main__':
                    for site in range(SIZE-1)]
     )
     mpo = xx_mpo(len(mps))
-    dmrg = DMRG(mps, mpo)
+    dmrg = tt.DMRG(mps, mpo)
 
     # Run DMRG
     energies, errors = [], []

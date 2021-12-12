@@ -4,7 +4,6 @@ import numpy as np
 from numpy.testing import assert_array_max_ulp
 
 import tensortrain as tt
-import dmrg_tn
 import siam
 
 
@@ -28,7 +27,7 @@ def test_siam_gs_energy():
         bond_dims=[min(2**(site), 2**(len(ham)-site), max_bond_dim//4)
                    for site in range(len(ham)-1)]
     )
-    dmrg = dmrg_tn.DMRG(mps, ham)
+    dmrg = tt.DMRG(mps, ham)
 
     # Run DMRG
     for __ in range(sweeps):

@@ -9,7 +9,7 @@ import numpy as np
 import tensornetwork as tn
 import scipy.sparse.linalg as sla
 
-import tensortrain as tt
+import tensortrain.basics as tt
 
 LOGGER = logging.getLogger(__name__)
 
@@ -183,17 +183,3 @@ class DMRG(tt.Sweeper):
         mpo_l = tn.contract_between(ham1.left, ham2.left)
         ham_sqr = tn.contract_between(mpo_l, mpo_r)
         return ham_sqr.tensor.item()
-
-
-def setup_logging(level):
-    """Set logging level and handler."""
-    try:  # use colored log if available
-        import colorlog  # pylint: disable=import-outside-toplevel
-    except ImportError:  # use standard logging
-        logging.basicConfig()
-    else:
-        handler = colorlog.StreamHandler()
-        handler.setFormatter(colorlog.ColoredFormatter(
-            "%(log_color)s%(levelname)s%(reset)s:%(message)s"))
-        LOGGER.addHandler(handler)
-    LOGGER.setLevel(level)

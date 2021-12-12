@@ -4,8 +4,6 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 import tensortrain as tt
-import tdvp
-import dmrg_tn
 import siam
 
 
@@ -29,14 +27,14 @@ def test_tdvp1_siam_gs_evolution():
         bond_dims=[min(2**(site), 2**(len(ham)-site), max_bond_dim//4)
                    for site in range(len(ham)-1)]
     )
-    dmrg = dmrg_tn.DMRG(mps, ham)
+    dmrg = tt.DMRG(mps, ham)
 
     # Run DMRG
     for __ in range(sweeps):
         eng, __ = dmrg.sweep_2site(max_bond_dim, trunc_weight)
 
     gs_energy = eng[-1]
-    tevo = tdvp.TDVP(state=dmrg.state, ham=dmrg.ham)
+    tevo = tt.TDVP(state=dmrg.state, ham=dmrg.ham)
     time_step = 0.1
     tevo.sweep_1site_right(time_step)
     # one sweep is half a time evolution

@@ -5,7 +5,6 @@ import tensornetwork as tn
 from gftool import siam
 
 import tensortrain as tt
-from dmrg_tn import DMRG, setup_logging
 
 DIM = 2  #: local dimension
 ORAISE = np.array([[0, 1],
@@ -98,7 +97,7 @@ if __name__ == '__main__':
     SWEEPS = 3
     SHOW = True
     # setup_logging(level=logging.DEBUG)  # print all
-    setup_logging(level=logging.INFO)
+    tt.setup_logging(level=logging.INFO)
 
     # Initialize state and operator
     BATH_SIZE = 50
@@ -114,7 +113,7 @@ if __name__ == '__main__':
         bond_dims=[min(2**(site), 2**(len(ham)-site), MAX_BOND_DIM//4)
                    for site in range(len(ham)-1)]
     )
-    dmrg = DMRG(mps, ham)
+    dmrg = tt.DMRG(mps, ham)
 
     # Run DMRG
     energies, errors = [], []

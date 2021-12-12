@@ -11,6 +11,9 @@ from tensortrain.basics import (
     herm_linear_operator,
     inner,
 )
+from tensortrain.dmrg import DMRG
+from tensortrain.tdvp import TDVP
+
 
 LOGGER = logging.getLogger(__name__)
 

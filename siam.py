@@ -4,7 +4,8 @@ import tensornetwork as tn
 
 from gftool import siam
 
-from dmrg_tn import MPS, MPO, DMRG, chain, MO_AXES, setup_logging
+import tensortrain as tt
+from dmrg_tn import DMRG, setup_logging
 
 DIM = 2  #: local dimension
 ORAISE = np.array([[0, 1],
@@ -19,7 +20,7 @@ for const in (ORAISE, ONUMBER, OPARITY, IDX):
     const.setflags(write=False)
 
 
-def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> MPO:
+def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> tt.MPO:
     """Construct MPO for the SIAM in star geometry.
 
     Currently no spin-dependent parameters allowed, up/dn spin are identically.
@@ -52,16 +53,16 @@ def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> MPO:
     Hup = []
     Hup.append(np.array([e_bath[0]*ONUMBER, IDX, hopping[0]*ORAISE,
                          hopping[0].conj()*ORAISE.T])[None, :])
-    for eps, tt in zip(e_bath[1:], hopping[1:]):
+    for eps, hop in zip(e_bath[1:], hopping[1:]):
         Hi = wi.copy()
-        Hi[1, :, :, :] = [eps*ONUMBER, IDX, tt*ORAISE, tt.conj()*ORAISE.T]
+        Hi[1, :, :, :] = [eps*ONUMBER, IDX, hop*ORAISE, hop.conj()*ORAISE.T]
         Hup.append(Hi)
     Hdn = []
     Hdn.append(np.array([e_bath[-1]*ONUMBER, IDX, hopping[-1]*ORAISE,
                          hopping[-1].conj()*ORAISE.T])[:, None])
-    for eps, tt in zip(e_bath[-2::-1], hopping[-2::-1]):
+    for eps, hop in zip(e_bath[-2::-1], hopping[-2::-1]):
         Hi = wi.copy()
-        Hi[:, 1, :, :] = [eps*ONUMBER, IDX, tt*ORAISE, tt.conj()*ORAISE.T]
+        Hi[:, 1, :, :] = [eps*ONUMBER, IDX, hop*ORAISE, hop.conj()*ORAISE.T]
         Hdn.append(Hi)
     Himpup = np.zeros([4, 3, DIM, DIM])
     Himpup[1, :, :, :] = [IDX, e_onsite*ONUMBER, ONUMBER]
@@ -72,13 +73,13 @@ def siam_mpo(e_onsite: float, interaction: float, e_bath, hopping) -> MPO:
     end = np.ones([1, 1, 1], dtype=np.int8)
     node_l = tn.Node(end, name="LH", axis_names=["right", "phys_in", "phys_out"])
     node_r = tn.Node(end, name="HR", axis_names=["left", "phys_in", "phys_out"])
-    nodes = [tn.Node(hi, name=f"H{site}↑", axis_names=MO_AXES) for site, hi in enumerate(Hup)]
-    nodes.append(tn.Node(Himpup, name="Himp↑", axis_names=MO_AXES))
-    nodes.append(tn.Node(Himpdn, name="Himp↓", axis_names=MO_AXES))
-    _nodes = [tn.Node(hi, name=f"H{site}↓", axis_names=MO_AXES) for site, hi in enumerate(Hdn)]
+    nodes = [tn.Node(hi, name=f"H{site}↑", axis_names=tt.MO_AXES) for site, hi in enumerate(Hup)]
+    nodes.append(tn.Node(Himpup, name="Himp↑", axis_names=tt.MO_AXES))
+    nodes.append(tn.Node(Himpdn, name="Himp↓", axis_names=tt.MO_AXES))
+    _nodes = [tn.Node(hi, name=f"H{site}↓", axis_names=tt.MO_AXES) for site, hi in enumerate(Hdn)]
     nodes += _nodes[::-1]
-    chain([node_l] + nodes + [node_r])
-    return MPO(nodes, left=node_l, right=node_r)
+    tt.chain([node_l] + nodes + [node_r])
+    return tt.MPO(nodes, left=node_l, right=node_r)
 
 
 def exact_energy(e_onsite, e_bath, hopping) -> float:
@@ -108,7 +109,7 @@ if __name__ == '__main__':
     HOPPING = np.ones(BATH_SIZE)
     U = 0
     ham = siam_mpo(E_ONSITE, interaction=U, e_bath=E_BATH, hopping=HOPPING)
-    mps = MPS.from_random(
+    mps = tt.MPS.from_random(
         phys_dims=[2]*len(ham),
         bond_dims=[min(2**(site), 2**(len(ham)-site), MAX_BOND_DIM//4)
                    for site in range(len(ham)-1)]

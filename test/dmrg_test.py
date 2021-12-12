@@ -3,6 +3,7 @@ import numpy as np
 
 from numpy.testing import assert_array_max_ulp
 
+import tensortrain as tt
 import dmrg_tn
 import siam
 
@@ -22,7 +23,7 @@ def test_siam_gs_energy():
     e_bath = np.linspace(-2, 2, num=bath_size)
     hopping = np.ones(bath_size)
     ham = siam.siam_mpo(e_onsite, interaction=0, e_bath=e_bath, hopping=hopping)
-    mps = dmrg_tn.MPS.from_random(
+    mps = tt.MPS.from_random(
         phys_dims=[2]*len(ham),
         bond_dims=[min(2**(site), 2**(len(ham)-site), max_bond_dim//4)
                    for site in range(len(ham)-1)]

@@ -13,6 +13,7 @@ from tensortrain.basics import (
 )
 from tensortrain.dmrg import DMRG
 from tensortrain.tdvp import TDVP
+from tensortrain.hamiltonians import heisenbergxx
 
 
 LOGGER = logging.getLogger(__name__)

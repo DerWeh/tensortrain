@@ -9,8 +9,10 @@ import tensornetwork as tn
 import siam
 
 import tensortrain as tt
+
+from tensortrain.fixes import expm_multiply
 from dmrg_tn import setup_logging, DMRG
-from _expm_multiply import expm_multiply
+
 
 LOGGER = logging.getLogger(__name__)
 

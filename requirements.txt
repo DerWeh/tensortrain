@@ -1,0 +1,4 @@
+gftool
+numpy
+scipy
+tensornetwork~=0.4.4

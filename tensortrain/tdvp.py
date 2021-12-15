@@ -25,12 +25,13 @@ class TDVP(tt.Sweeper):
             # locally evolve the state of sites `site`
             mpo = [self.ham_left[site].copy(), self.ham[site].copy(), self.ham_right[site].copy()]
             tt.chain(mpo)
-            # TODO: calculate the trace for calculation of exponential
             h_eff = tt.herm_linear_operator(mpo)
             # show(mpo)
             v0 = self.state[site]
             new_node = tn.Node(
-                expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1)).reshape(v0.shape)
+                expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1),
+                              traceA=-0.5j*time*tt.trace(mpo),
+                              ).reshape(v0.shape)
             )
             if site == len(self.state) - 1:  # state evolved, stop here
                 new_node.name = str(site)
@@ -49,7 +50,9 @@ class TDVP(tt.Sweeper):
             tt.chain(mpo)
             h_eff = tt.herm_linear_operator(mpo)
             new_node = tn.Node(
-                expm_multiply(+0.5j*time*h_eff, center.tensor.reshape(-1)).reshape(center.shape)
+                expm_multiply(+0.5j*time*h_eff, center.tensor.reshape(-1),
+                              traceA=+0.5j*time*tt.trace(mpo),
+                              ).reshape(center.shape)
             )
             right = self.state[site+1].copy()
             tn.connect(new_node[1], right["left"])
@@ -69,12 +72,13 @@ class TDVP(tt.Sweeper):
             # locally evolve the state of sites `site`
             mpo = [self.ham_left[site].copy(), self.ham[site].copy(), self.ham_right[site].copy()]
             tt.chain(mpo)
-            # TODO: calculate the trace for calculation of exponential
             h_eff = tt.herm_linear_operator(mpo)
             # show(mpo)
             v0 = self.state[site]
             new_node = tn.Node(
-                expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1)).reshape(v0.shape)
+                expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1),
+                              traceA=-0.5j*time*tt.trace(mpo),
+                              ).reshape(v0.shape)
             )
             if site == 0:  # stated evolved, stop here
                 new_node.name = str(site)
@@ -93,7 +97,9 @@ class TDVP(tt.Sweeper):
             tt.chain(mpo)
             h_eff = tt.herm_linear_operator(mpo)
             new_node = tn.Node(
-                expm_multiply(+0.5j*time*h_eff, center.tensor.reshape(-1)).reshape(center.shape)
+                expm_multiply(+0.5j*time*h_eff, center.tensor.reshape(-1),
+                              traceA=+0.5j*time*tt.trace(mpo),
+                              ).reshape(center.shape)
             )
             left = self.state[site-1].copy()
             tn.connect(left["right"], new_node[0])
@@ -129,7 +135,9 @@ class TDVP(tt.Sweeper):
                 output_edge_order=[node1["left"], node1["phys"], node2["phys"], node2["right"]]
             )
             dbl_node = tn.Node(
-                expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1)).reshape(v0.shape)
+                expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1),
+                              traceA=-0.5j*time*tt.trace(mpo)
+                              ).reshape(v0.shape)
             )
             # split the tensor and compress it moving center to the right
             left, rs, rvh, trunc_s = tn.split_node_full_svd(
@@ -156,7 +164,9 @@ class TDVP(tt.Sweeper):
                 tt.chain(mpo)
                 h_eff = tt.herm_linear_operator(mpo)
                 right = tn.Node(
-                    expm_multiply(+0.5j*time*h_eff, right.tensor.reshape(-1)).reshape(right.shape),
+                    expm_multiply(+0.5j*time*h_eff, right.tensor.reshape(-1),
+                                  traceA=+0.5j*time*tt.trace(mpo)
+                                  ).reshape(right.shape),
                     name=str(site+1), axis_names=tt.AXES_S,
                 )
             self.state.set_range(site, site+2, [left, right])
@@ -186,7 +196,9 @@ class TDVP(tt.Sweeper):
             )
             print(f"Forw-evolve {site} and {site+1}")
             dbl_node = tn.Node(
-                expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1)).reshape(v0.shape)
+                expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1),
+                              traceA=-0.5j*time*tt.trace(mpo),
+                              ).reshape(v0.shape)
             )
             # split the tensor and compress it moving center to the right
             lu, ls, right, trunc_s = tn.split_node_full_svd(
@@ -213,7 +225,9 @@ class TDVP(tt.Sweeper):
                 tt.chain(mpo)
                 h_eff = tt.herm_linear_operator(mpo)
                 left = tn.Node(
-                    expm_multiply(+0.5j*time*h_eff, left.tensor.reshape(-1)).reshape(left.shape),
+                    expm_multiply(+0.5j*time*h_eff, left.tensor.reshape(-1),
+                                  traceA=+0.5j*time*tt.trace(mpo),
+                                  ).reshape(left.shape),
                     name=str(site-1), axis_names=tt.AXES_S,
                 )
             self.state.set_range(site-1, site+1, [left, right])

@@ -293,6 +293,15 @@ def herm_linear_operator(operator: List[tn.Node]) -> sla.LinearOperator:
     return sla.LinearOperator(shape=(size, size), matvec=matvec_, rmatvec=matvec_)
 
 
+def trace(operator: List[tn.Node]) -> np.number:
+    """Calculate the trace of the network `operator`."""
+    operator = tn.replicate_nodes(operator)
+    for node in operator:
+        tn.connect(node["phys_in"], node["phys_out"])
+    traced = [tn.contract_trace_edges(node) for node in operator]
+    return tn.contractors.auto(traced).tensor.item()
+
+
 class Sweeper:
     """Base class for sweeping algorithms, implementing effective Hamiltonians."""
 

@@ -63,6 +63,7 @@ class TDVP(tt.Sweeper):
             )
             self.state.set_range(site, site+2, [left, right])
             self.state.center += 1
+            self.ham_right[site] = None
 
     def sweep_1site_left(self, time: float) -> None:
         """Sweep from right to left, evolving 1 site at a time."""
@@ -110,6 +111,7 @@ class TDVP(tt.Sweeper):
             )
             self.state.set_range(site-1, site+1, [left, right])
             self.state.center -= 1
+            self.ham_left[site] = None
 
     def sweep_1site(self, time: float) -> None:
         """Full TDVP sweep evolving 1 site at a time."""
@@ -147,6 +149,7 @@ class TDVP(tt.Sweeper):
             )
             left.add_axis_names(tt.AXES_S)
             self.update_ham_left(site+1, state_node=left)
+            self.ham_right[site] = None
             # keep the norm
             kept, trunc = np.sum(rs.tensor**2), np.sum(trunc_s**2)
             tws.append(np.sqrt(trunc))
@@ -208,6 +211,7 @@ class TDVP(tt.Sweeper):
             )
             right.add_axis_names(tt.AXES_S)
             self.update_ham_right(site-1, state_node=right)
+            self.ham_left[site] = None
             # keep the norm
             kept, trunc = np.sum(ls.tensor**2), np.sum(trunc_s**2)
             tws.append(np.sqrt(trunc))

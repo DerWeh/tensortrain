@@ -1,10 +1,12 @@
 """Time-depended variational principle for tensor trains."""
 import logging
 
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import tensornetwork as tn
+
+from scipy.sparse.linalg import LinearOperator
 
 import tensortrain.basics as tt
 
@@ -14,13 +16,21 @@ from tensortrain.fixes import expm_multiply
 LOGGER = logging.getLogger(__name__)
 
 
+def _expval(linop: LinearOperator, bra: tn.Node) -> float:
+    """Calculate expectation value of `linop` for state `bra`."""
+    matvec = linop.matvec(bra.tensor.reshape(-1))
+    return np.sum(matvec*bra.tensor.conj().reshape(-1))
+
+
 class TDVP(tt.Sweeper):
     """TDVP method for time evolution."""
 
-    def sweep_1site_right(self, time: float) -> None:
+    def sweep_1site_right(self, time: float) -> Tuple[List[float], List[float]]:
         """Sweep from left to right, evolving 1 site at a time."""
         assert self.state.center == 0, "To sweep right we start from the left"
         assert None not in self.ham_right, "We need all right parts"
+        energy_fw: List[float] = []  # check that energy is conserved (forward)
+        energy_bw: List[float] = []  # check that energy is conserved (backward)
         for site in range(0, len(self.state)):
             # locally evolve the state of sites `site`
             mpo = [self.ham_left[site].copy(), self.ham[site].copy(), self.ham_right[site].copy()]
@@ -33,6 +43,7 @@ class TDVP(tt.Sweeper):
                               traceA=-0.5j*time*tt.trace(mpo),
                               ).reshape(v0.shape)
             )
+            energy_fw.append(_expval(h_eff, bra=new_node))
             if site == len(self.state) - 1:  # state evolved, stop here
                 new_node.name = str(site)
                 new_node.add_axis_names(tt.AXES_S)
@@ -44,6 +55,7 @@ class TDVP(tt.Sweeper):
                                             left_name=f"{site}L")
             left.add_axis_names(tt.AXES_S)
             # create new left Hamiltonian for next site
+            self.state.set_node(site, left.copy())  # copy to remove right connection
             self.update_ham_left(site=site+1, state_node=left)
 
             mpo = [self.ham_left[site+1].copy(), self.ham_right[site].copy()]
@@ -54,6 +66,7 @@ class TDVP(tt.Sweeper):
                               traceA=+0.5j*time*tt.trace(mpo),
                               ).reshape(center.shape)
             )
+            energy_bw.append(_expval(h_eff, bra=new_node))
             right = self.state[site+1].copy()
             tn.connect(new_node[1], right["left"])
             right = tn.contract_between(
@@ -61,14 +74,17 @@ class TDVP(tt.Sweeper):
                 output_edge_order=[new_node[0], *right[1:]],
                 axis_names=tt.AXES_S
             )
-            self.state.set_range(site, site+2, [left, right])
-            self.state.center += 1
             self.ham_right[site] = None
+            self.state.set_node(site+1, right)
+            self.state.center += 1
+        return energy_fw, energy_bw
 
-    def sweep_1site_left(self, time: float) -> None:
+    def sweep_1site_left(self, time: float) -> Tuple[List[float], List[float]]:
         """Sweep from right to left, evolving 1 site at a time."""
         assert self.state.center == len(self.state) - 1, "To sweep left we start from the right."
         assert None not in self.ham_left, "We need all left parts"
+        energy_fw: List[float] = []  # check that energy is conserved (forward)
+        energy_bw: List[float] = []  # check that energy is conserved (backward)
         for site in range(len(self.state)-1, -1, -1):
             # locally evolve the state of sites `site`
             mpo = [self.ham_left[site].copy(), self.ham[site].copy(), self.ham_right[site].copy()]
@@ -81,6 +97,7 @@ class TDVP(tt.Sweeper):
                               traceA=-0.5j*time*tt.trace(mpo),
                               ).reshape(v0.shape)
             )
+            energy_fw.append(_expval(h_eff, bra=new_node))
             if site == 0:  # stated evolved, stop here
                 new_node.name = str(site)
                 new_node.add_axis_names(tt.AXES_S)
@@ -92,6 +109,7 @@ class TDVP(tt.Sweeper):
                                              right_name=f"R{site}")
             right.add_axis_names(tt.AXES_S)
             # create new right Hamiltonian for next site
+            self.state.set_node(site, right.copy())  # copy to remove right connection
             self.update_ham_right(site=site-1, state_node=right)
 
             mpo = [self.ham_left[site].copy(), self.ham_right[site-1].copy()]
@@ -102,6 +120,7 @@ class TDVP(tt.Sweeper):
                               traceA=+0.5j*time*tt.trace(mpo),
                               ).reshape(center.shape)
             )
+            energy_bw.append(_expval(h_eff, bra=new_node))
             left = self.state[site-1].copy()
             tn.connect(left["right"], new_node[0])
             left = tn.contract_between(
@@ -109,14 +128,16 @@ class TDVP(tt.Sweeper):
                 output_edge_order=[*left[:-1], new_node[1]],
                 axis_names=tt.AXES_S
             )
-            self.state.set_range(site-1, site+1, [left, right])
-            self.state.center -= 1
             self.ham_left[site] = None
+            self.state.set_node(site-1, left)
+            self.state.center -= 1
+        return energy_fw, energy_bw
 
-    def sweep_1site(self, time: float) -> None:
+    def sweep_1site(self, time: float) -> Tuple[List[float], List[float]]:
         """Full TDVP sweep evolving 1 site at a time."""
-        self.sweep_1site_right(time)
-        self.sweep_1site_left(time)
+        fw_r, bw_r = self.sweep_1site_right(time)
+        fw_l, bw_l = self.sweep_1site_left(time)
+        return fw_r + fw_l, bw_r + bw_l
 
     def sweep_2site_right(self, time: float, max_bond_dim: int, trunc_weight: float
                           ) -> List[float]:
@@ -197,7 +218,6 @@ class TDVP(tt.Sweeper):
                 node1, node2,
                 output_edge_order=[node1["left"], node1["phys"], node2["phys"], node2["right"]]
             )
-            print(f"Forw-evolve {site} and {site+1}")
             dbl_node = tn.Node(
                 expm_multiply(-0.5j*time*h_eff, v0.tensor.reshape(-1),
                               traceA=-0.5j*time*tt.trace(mpo),
@@ -222,7 +242,6 @@ class TDVP(tt.Sweeper):
                 axis_names=tt.AXES_S,
             )
             if site > 1:  # backward evolve center of orthogonality
-                print(f"Back-evolve {site-1}")
                 mpo = [self.ham_left[site-1].copy(),
                        self.ham[site-1].copy(),
                        self.ham_right[site-1].copy()]

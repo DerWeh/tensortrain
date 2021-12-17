@@ -193,6 +193,21 @@ class State(Sequence):
         """Give number of nodes."""
         return len(self.nodes)
 
+    def __eq__(self, o):
+        """Equality check for easier debugging, requires all elements to be equal.
+
+        States with different gauges are **not** considered as equal!
+
+        """
+        if not isinstance(o, State):
+            return False
+        if len(self) != len(o):
+            return False
+        for self_node, o_node in zip(self, o):
+            if not np.all(self_node.tensor == o_node.tensor):
+                return False
+        return True
+
     def copy(self, conjugate=False) -> State:
         """Create (shallow) copy."""
         nodes = tn.replicate_nodes(self.nodes, conjugate=conjugate)

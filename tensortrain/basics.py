@@ -324,29 +324,29 @@ class Sweeper:
         nsite = len(self.state)
         ket = self.state.copy()
         bra = self.state.copy(conjugate=True)
-        ham = self.ham.copy()
-        mpo = ham.nodes
-        mpo_r = ham.right
+        ham_full = self.ham.copy()
+        ham = ham_full.nodes
+        ham_r = ham_full.right
         # connect the network
         for site in range(nsite):  # connect vertically
-            tn.connect(ket[site]["phys"], mpo[site]["phys_in"])
-            tn.connect(mpo[site]["phys_out"], bra[site]["phys"])
-        tn.connect(ket[-1]["right"], mpo_r["phys_in"])
-        tn.connect(bra[-1]["right"], mpo_r["phys_out"])
+            tn.connect(ket[site]["phys"], ham[site]["phys_in"])
+            tn.connect(bra[site]["phys"], ham[site]["phys_out"])
+        tn.connect(ket[-1]["right"], ham_r["phys_in"])
+        tn.connect(bra[-1]["right"], ham_r["phys_out"])
 
         # contract the network
-        ham_right: List[tn.Node] = [None] * nsite
-        ham_right[-1] = mpo_r.copy()
+        ham_rights: List[tn.Node] = [None] * nsite
+        ham_rights[-1] = ham_r.copy()
         for site in range(nsite-1, 0, -1):
-            # show([mps[ii], mpo[ii], con[ii], mpo_r])
-            mpo_r = tn.contractors.auto(
-                [ket[site], mpo[site], bra[site], mpo_r],
-                output_edge_order=[nodes[site]["left"] for nodes in (mpo, ket, bra)],
+            # show([mps[ii], ham[ii], con[ii], ham_r])
+            ham_r = tn.contractors.auto(
+                [ket[site], ham[site], bra[site], ham_r],
+                output_edge_order=[nodes[site]["left"] for nodes in (ham, ket, bra)],
             )
-            mpo_r.name = f"HR{site}"
-            ham_right[site-1] = mpo_r.copy()
-            ham_right[site-1].axis_names = ham_right[-1].axis_names
-        return ham_right
+            ham_r.name = f"HR{site}"
+            ham_rights[site-1] = ham_r.copy()
+            ham_rights[site-1].axis_names = ham_rights[-1].axis_names
+        return ham_rights
 
     def update_ham_left(self, site: int, state_node: tn.Node):
         """Calculate left Hamiltonian at `site` from ``site-1`` and `state_node`."""
@@ -356,14 +356,14 @@ class Sweeper:
         bra = state_node.copy(conjugate=True)
         ham = self.ham[site-1].copy()
         ket = state_node.copy()
-        tn.connect(bra["left"], ham_left["phys_in"])
+        tn.connect(bra["left"], ham_left["phys_out"])
         tn.connect(ham["left"], ham_left["right"])
-        tn.connect(ket["left"], ham_left["phys_out"])
-        tn.connect(bra["phys"], ham["phys_in"])
-        tn.connect(ket["phys"], ham["phys_out"])
+        tn.connect(ket["left"], ham_left["phys_in"])
+        tn.connect(bra["phys"], ham["phys_out"])
+        tn.connect(ket["phys"], ham["phys_in"])
         self.ham_left[site] = tn.contractors.auto(
             [ham_left, bra, ham, ket],
-            output_edge_order=[ham["right"], bra["right"], ket["right"]]  # match AXES_L
+            output_edge_order=[ham["right"], ket["right"], bra["right"]]  # match AXES_L
         )
         self.ham_left[site].name = f"LH{site}"
         self.ham_left[site].axis_names = AXES_L
@@ -379,14 +379,14 @@ class Sweeper:
         ket = state_node.copy()
 
         # create new right Hamiltonian
-        tn.connect(bra["right"], ham_right["phys_in"])
+        tn.connect(bra["right"], ham_right["phys_out"])
         tn.connect(ham["right"], ham_right["left"])
-        tn.connect(ket["right"], ham_right["phys_out"])
-        tn.connect(bra["phys"], ham["phys_in"])
-        tn.connect(ket["phys"], ham["phys_out"])
+        tn.connect(ket["right"], ham_right["phys_in"])
+        tn.connect(bra["phys"], ham["phys_out"])
+        tn.connect(ket["phys"], ham["phys_in"])
         self.ham_right[site] = tn.contractors.auto(
             [ham_right, bra, ham, ket],
-            output_edge_order=[ham["left"], bra["left"], ket["left"]]
+            output_edge_order=[ham["left"], ket["left"], bra["left"]]
         )
         self.ham_right[site].name = f"HR{site}"
         self.ham_right[site].axis_names = AXES_R

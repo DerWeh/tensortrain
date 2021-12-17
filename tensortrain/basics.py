@@ -77,7 +77,7 @@ class State(Sequence):
         """Handle canonicalization."""
         if canonicalize:  # FIXME: currently we ignore previously set center.
             self.center = len(self) - 1
-            self.set_center(new_pos=0)
+            self.set_center(new_pos=0, normalize=True)
 
     @classmethod
     def from_random(cls, phys_dims: List[int], bond_dims: List[int], seed=None):
@@ -108,9 +108,9 @@ class State(Sequence):
 
         return cls(nodes, canonicalize=True)
 
-    def set_center(self, new_pos: int) -> None:
+    def set_center(self, new_pos: int, normalize=False) -> None:
         """Set the center of orthogonality `self.center` to `new_pos` using QR."""
-        assert self.center is not None, """I don't want to handle this at the moment."""
+        assert self.center is not None, "I don't want to handle this at the moment."
         if not 0 <= new_pos < len(self):
             raise ValueError
         if new_pos == self.center:
@@ -127,8 +127,8 @@ class State(Sequence):
                 node_l = self.nodes[pos-1]
                 self.nodes[pos-1] = tn.contract_between(node_l, left, name=str(pos-1),
                                                         axis_names=AXES_S)
-                # normalize network
-                self.nodes[pos-1].tensor /= _norm(self.nodes[pos-1])
+                if normalize:  # normalize in every set to avoid accumulation
+                    self.nodes[pos-1].tensor /= _norm(self.nodes[pos-1])
             self.center = pos - 1
             return
         if new_pos > self.center:
@@ -143,8 +143,8 @@ class State(Sequence):
                 node_r = self.nodes[pos+1]
                 self.nodes[pos+1] = tn.contract_between(right, node_r, name=str(pos+1),
                                                         axis_names=AXES_S)
-                # normalize network
-                self.nodes[pos+1].tensor /= _norm(self.nodes[pos+1])
+                if normalize:  # normalize in every set to avoid accumulation
+                    self.nodes[pos+1].tensor /= _norm(self.nodes[pos+1])
             self.center = pos + 1
             return
         raise NotImplementedError("This shouldn't have happened.")

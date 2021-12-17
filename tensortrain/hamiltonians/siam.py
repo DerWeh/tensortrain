@@ -6,7 +6,7 @@ from gftool import siam
 
 import tensortrain as tt
 
-DIM = 2  #: local dimension
+DIM = 2  #: local dimension ordered as phys_in, phys_out
 ORAISE = np.array([[0, 1],
                    [0, 0]], dtype=np.int8)
 ONUMBER = np.array([[0, 0],
@@ -14,6 +14,11 @@ ONUMBER = np.array([[0, 0],
 OPARITY = np.array([[1, 0],
                     [0, -1]], dtype=np.int8)
 IDX = np.eye(DIM, dtype=np.int8)
+
+assert np.allclose(ORAISE @ ONUMBER, ORAISE)
+assert np.allclose(ORAISE.T @ ONUMBER, 0)
+assert np.allclose(ONUMBER @ ONUMBER, ONUMBER)
+assert np.allclose(OPARITY @ OPARITY, IDX)
 
 for const in (ORAISE, ONUMBER, OPARITY, IDX):
     const.setflags(write=False)
@@ -79,6 +84,128 @@ def siam_hamiltonain(e_onsite: float, interaction: float, e_bath, hopping) -> tt
     nodes += _nodes[::-1]
     tt.chain([node_l] + nodes + [node_r])
     return tt.Operator(nodes, left=node_l, right=node_r)
+
+
+def apply_local(site: int, ket: tt.State, operator: tn.Node,
+                signs=False, canonicalize=False) -> tt.State:
+    """Apply local `operator` at `site` of state `ket`.
+
+    Parameters
+    ----------
+    site : int
+        Site at which local operator is applied.
+    ket : tt.State
+        State to which the operator is applied.
+    operator : tn.Node
+        Local node, has to have axes two "phys_in" and "phys_out".
+    signs : bool, optional
+        Weather to apply fermionic signs, should be done for anti-commuting
+        operators like creation and annihilation and not for commuting
+        operators like the density. (default: False)
+    canonicalize : bool, optional
+        Weather to set site 0 as center of orthogonality. (default: False)
+
+    Returns
+    -------
+    tt.State
+        New state with applied operator.
+
+    """
+    if site >= len(ket) or site < 0:
+        raise ValueError(f"Invalid site {site} for state of length {len(ket)}.")
+    ket = ket.copy()
+    if signs:
+        # fermionic sign
+        for pos in range(site):
+            sign = tn.Node(OPARITY, axis_names=["phys_in", "phys_out"])
+            node = ket[pos]
+            tn.connect(node["phys"], sign["phys_in"])
+            ket.nodes[pos] = tn.contract_between(
+                node, sign, name=str(pos),
+                output_edge_order=(node["left"], sign["phys_out"], node["right"]),
+                axis_names=tt.AXES_S
+            )
+    # actual increase of particle number
+    node = ket[site]
+    tn.connect(node["phys"], operator["phys_in"])
+    ket.nodes[site] = tn.contract_between(
+        node, operator, name=str(site),
+        output_edge_order=(node["left"], operator["phys_out"], node["right"]),
+        axis_names=tt.AXES_S
+    )
+    if canonicalize:
+        if ket.center < site:
+            ket.center = site
+        ket.set_center(0)
+    else:
+        ket.center = None
+    return ket
+
+
+def apply_number(site: int, ket: tt.State, canonicalize=False) -> tt.State:
+    """Apply number operator at `site` to state `ket`.
+
+    Parameters
+    ----------
+    site : int
+        Position of the site.
+    ket : tt.State
+        State the operator is applied to.
+    canonicalize : bool, optional
+        Whether to set site ``0`` as the center of orthogonality of the new state.
+
+    Returns
+    -------
+    tt.State
+        The new state.
+
+    """
+    onumber = tn.Node(ONUMBER, axis_names=["phys_in", "phys_out"])
+    return apply_local(site, ket, operator=onumber, signs=False, canonicalize=canonicalize)
+
+
+def apply_creation(site: int, ket: tt.State, canonicalize=False) -> tt.State:
+    """Apply creation operator at `site` to state `ket`.
+
+    Parameters
+    ----------
+    site : int
+        Position of the site.
+    ket : tt.State
+        State the operator is applied to.
+    canonicalize : bool, optional
+        Whether to set site ``0`` as the center of orthogonality of the new state.
+
+    Returns
+    -------
+    tt.State
+        The new state.
+
+    """
+    oraise = tn.Node(ORAISE, axis_names=["phys_in", "phys_out"])
+    return apply_local(site, ket, operator=oraise, signs=True, canonicalize=canonicalize)
+
+
+def apply_annihilation(site: int, ket: tt.State, canonicalize=False) -> tt.State:
+    """Apply annihilation operator at `site` to state `ket`.
+
+    Parameters
+    ----------
+    site : int
+        Position of the site.
+    ket : tt.State
+        State the operator is applied to.
+    canonicalize : bool, optional
+        Whether to set site ``0`` as the center of orthogonality of the new state.
+
+    Returns
+    -------
+    tt.State
+        The new state.
+
+    """
+    oraise = tn.Node(ORAISE.T, axis_names=["phys_in", "phys_out"])
+    return apply_local(site, ket, operator=oraise, signs=True, canonicalize=canonicalize)
 
 
 def exact_energy(e_onsite, e_bath, hopping) -> float:

@@ -344,8 +344,8 @@ class Sweeper:
                 output_edge_order=[nodes[site]["left"] for nodes in (ham, ket, bra)],
             )
             ham_r.name = f"HR{site}"
+            ham_r.axis_names = AXES_R
             ham_rights[site-1] = ham_r.copy()
-            ham_rights[site-1].axis_names = ham_rights[-1].axis_names
         return ham_rights
 
     def update_ham_left(self, site: int, state_node: tn.Node):

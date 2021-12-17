@@ -23,6 +23,11 @@ def show(nodes: List[tn.Node]):
 class DMRG(tt.Sweeper):
     """DMRG method to obtain ground-state."""
 
+    def __init__(self, state: tt.State, ham: tt.Operator):
+        """Use starting state and Hamiltonian."""
+        super().__init__(state, ham=ham)
+        self.energy: float = np.nan
+
     def sweep_2site_right(self, max_bond_dim: int, trunc_weight: float
                           ) -> Tuple[List[float], List[float]]:
         """Sweep from left to right, optimizing always two sites at once."""
@@ -46,11 +51,12 @@ class DMRG(tt.Sweeper):
                 node1, node2,
                 output_edge_order=[node1["left"], node1["phys"], node2["phys"], node2["right"]]
             )
-            gs_energy, gs_vec = sla.eigsh(
+            self.energy, gs_vec = sla.eigsh(
                 tt.herm_linear_operator(mpo), k=1, which='SA', v0=v0.tensor.reshape(-1),
                 # tol=1e-6
             )
-            energies.append(gs_energy.item())
+            self.energy = self.energy.item()
+            energies.append(self.energy)
             dbl_node = tn.Node(gs_vec.reshape(v0.shape))
             # split the tensor and compress it moving center to the right
             left, rs, rvh, trunc_s = tn.split_node_full_svd(
@@ -93,11 +99,12 @@ class DMRG(tt.Sweeper):
                 node1, node2,
                 output_edge_order=[node1["left"], node1["phys"], node2["phys"], node2["right"]]
             )
-            gs_energy, gs_vec = sla.eigsh(
+            self.energy, gs_vec = sla.eigsh(
                 tt.herm_linear_operator(mpo), k=1, which='SA', v0=v0.tensor.reshape(-1),
                 # tol=1e-6
             )
-            energies.append(gs_energy.item())
+            self.energy = self.energy.item()
+            energies.append(self.energy)
             dbl_node = tn.Node(gs_vec.reshape(v0.shape))
             # split the tensor and compress it moving center to the right
             lu, ls, right, trunc_s = tn.split_node_full_svd(

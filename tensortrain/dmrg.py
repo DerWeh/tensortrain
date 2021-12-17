@@ -130,23 +130,23 @@ class DMRG(tt.Sweeper):
         return energy_right + energy_left, tw_right + tw_left
 
     def eval_ham2(self) -> float:
-        """Evaulate ⟨ψ|H²|ψ⟩."""
+        """Evaluate ⟨ψ|H²|ψ⟩."""
         # do iteratively to save memory
-        bra = self.state.copy()
+        bra = self.state.copy(conjugate=True)
         ham1 = self.ham.copy()
         ham2 = self.ham.copy()
-        ket = self.state.copy(conjugate=True)
+        ket = self.state.copy()
         # connect network
+        tn.connect(bra[0]["left"], ham2.left["phys_out"])
         tn.connect(ham1.left["phys_out"], ham2.left["phys_in"])
-        tn.connect(bra[0]["left"], ham1.left["phys_in"])
-        tn.connect(ket[0]["left"], ham2.left["phys_out"])
+        tn.connect(ket[0]["left"], ham1.left["phys_in"])
         for bra_s, ham1_s, ham2_s, ket_s in zip(bra, ham1, ham2, ket):
-            tn.connect(bra_s["phys"], ham1_s["phys_in"])
+            tn.connect(bra_s["phys"], ham2_s["phys_out"])
             tn.connect(ham1_s["phys_out"], ham2_s["phys_in"])
-            tn.connect(ket_s["phys"], ham2_s["phys_out"])
-        tn.connect(bra[-1]["right"], ham1.right["phys_in"])
-        tn.connect(ket[-1]["right"], ham2.right["phys_out"])
+            tn.connect(ket_s["phys"], ham1_s["phys_in"])
+        tn.connect(bra[-1]["right"], ham2.right["phys_out"])
         tn.connect(ham1.right["phys_out"], ham2.right["phys_in"])
+        tn.connect(ket[-1]["right"], ham1.right["phys_in"])
 
         # contract the network
         mpo_r = tn.contract_between(ham1.right, ham2.right)

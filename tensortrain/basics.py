@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import logging
 
-from typing import Iterable, List, Optional
-from dataclasses import dataclass, InitVar
 from collections.abc import Sequence
+from dataclasses import dataclass, InitVar
+from functools import partial
+from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 import tensornetwork as tn
@@ -290,7 +291,7 @@ def _matvec(operator, vec_shape, path, vec):
     return res.tensor.reshape(-1)
 
 
-def herm_linear_operator(operator: List[tn.Node]) -> sla.LinearOperator:
+def herm_linear_operator_slow(operator: List[tn.Node]) -> sla.LinearOperator:
     """Create Hermitian linear operator from `operator`."""
     vec_shape = tuple(onode['phys_in'].dimension for onode in operator)
     size = np.product(vec_shape)
@@ -303,6 +304,62 @@ def herm_linear_operator(operator: List[tn.Node]) -> sla.LinearOperator:
 
     def matvec_(vec):
         return _matvec(operator, vec_shape=vec_shape, path=path, vec=vec)
+
+    # Hamiltonian is Hermitian -> rmatvec=matvec
+    return sla.LinearOperator(shape=(size, size), matvec=matvec_, rmatvec=matvec_)
+
+
+def _to_uname(axis: str, num: int):
+    if axis == "phys_out":
+        return -num  # external leg
+    if axis == "phys_in":
+        return num
+    if axis == "right":
+        return f"c{num}"
+    if axis == "left":
+        return f"c{num-1}"
+    raise AttributeError
+
+
+def _resolve_path(path: List[Tuple[int, int]], structure: List[tuple]):
+    structure = structure.copy()
+    resolved: list = []
+    for nodes in path:
+        n2, n1 = sorted(nodes)
+        ax1 = set(structure.pop(n1))
+        ax2 = set(structure.pop(n2))
+        resolved.extend(ax1 & ax2)
+        structure.append(ax1 ^ ax2)
+    return resolved
+
+
+def herm_linear_operator(operator: List[tn.Node]) -> sla.LinearOperator:
+    """Create Hermitian linear operator from `operator`."""
+    vec_shape = tuple(onode['phys_in'].dimension for onode in operator)
+    size = np.product(vec_shape)
+    # Pre-compute optimal path
+    testnode = tn.Node(np.empty(vec_shape))
+    oper_ = tn.replicate_nodes(operator)
+    for ii, onode in enumerate(oper_):
+        tn.connect(testnode[ii], onode['phys_in'])
+    path = tn.contractors.path_solver('optimal', nodes=oper_+[testnode])
+    operator = [op.tensor for op in oper_]
+
+    # assumes chain
+    num = len(oper_)
+    structure = []
+    for ii, op in enumerate(oper_, start=1):
+        structure.append(tuple(_to_uname(ax, ii) for ax in op.axis_names))
+    structure.append(tuple(range(1, num+1)))
+    ncon = partial(tn.ncon,
+                   network_structure=structure,
+                   con_order=_resolve_path(path, structure),
+                   out_order=tuple(range(-1, -num-1, -1)),
+                   check_network=False,
+                   )
+
+    def matvec_(vec):
+        return ncon(operator + [vec.reshape(vec_shape)]).reshape(-1)
 
     # Hamiltonian is Hermitian -> rmatvec=matvec
     return sla.LinearOperator(shape=(size, size), matvec=matvec_, rmatvec=matvec_)
